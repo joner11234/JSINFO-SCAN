@@ -318,7 +318,7 @@ class JSINFO:
             full_js_url = self.extract_link(parse_url, js_url)
             if full_js_url is False:
                 continue
-            print(full_js_url)
+            # print(full_js_url)
             
         for js_text in js_texts:
             self.FindLinkInJsText(url, js_text)
