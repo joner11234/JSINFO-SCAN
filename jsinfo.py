@@ -1,3 +1,4 @@
+ # -*- coding: UTF-8 -*-
 import argparse
 import asyncio
 import os
@@ -14,6 +15,8 @@ from tldextract import extract
 import socket
 from html import unescape
 import time
+from pathlib import Path
+
 
 """
 3.增加从JS中提取敏感信息的功能
@@ -45,16 +48,21 @@ class JSINFO:
         """初始化参数"""
         self.queue = Queue()
         self.root_domains = []
+        self.now_time = str(int(time.time()))
+        self.all_js_url=[]
+
         target = args.target
         if not target.startswith(('http://', 'https://')) and not os.path.isfile(target):
+            
             target = 'http://' + target
+            
         elif os.path.isfile(target):
             with open(target, 'r+', encoding='utf-8') as f:
                 for domain in f:
                     domain = domain.strip()
                     if not domain.startswith(('http://', 'https://')):
                         self.root_domains.append(domain)
-                        domain = 'http://www.' + domain
+                        domain = 'http://' + domain
                         self.queue.put(domain)
         if args.keywords is None:
             keyword = extract(target).domain
@@ -114,38 +122,41 @@ class JSINFO:
         self.link_pattern = re.compile(link_pattern, re.VERBOSE)
         self.js_pattern = 'src=["\'](.*?)["\']'
         self.href_pattern = 'href=["\'](.*?)["\']'
-        self.leak_info_patterns = {'mail': r'([-_a-zA-Z0-9\.]{1,64}@%s)', 'author': '@author[: ]+(.*?) ',
-                                   'accesskey_id': 'accesskeyid.*?["\'](.*?)["\']',
-                                   'accesskey_secret': 'accesskeyid.*?["\'](.*?)["\']',
-                                   'access_key': 'access_key.*?["\'](.*?)["\']', 'google_api': r'AIza[0-9A-Za-z-_]{35}',
-                                   'google_captcha': r'6L[0-9A-Za-z-_]{38}|^6[0-9a-zA-Z_-]{39}$',
-                                   'google_oauth': r'ya29\.[0-9A-Za-z\-_]+',
-                                   'amazon_aws_access_key_id': r'AKIA[0-9A-Z]{16}',
-                                   'amazon_mws_auth_toke': r'amzn\\.mws\\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
-                                   'amazon_aws_url': r's3\.amazonaws.com[/]+|[a-zA-Z0-9_-]*\.s3\.amazonaws.com',
-                                   'amazon_aws_url2': r"("r"[a-zA-Z0-9-\.\_]+\.s3\.amazonaws\.com"r"|s3://[a-zA-Z0-9-\.\_]+"r"|s3-[a-zA-Z0-9-\.\_\/]+"r"|s3.amazonaws.com/[a-zA-Z0-9-\.\_]+"r"|s3.console.aws.amazon.com/s3/buckets/[a-zA-Z0-9-\.\_]+)",
-                                   'facebook_access_token': r'EAACEdEose0cBA[0-9A-Za-z]+',
-                                   'authorization_basic': r'basic [a-zA-Z0-9=:_\+\/-]{5,100}',
-                                   'authorization_bearer': r'bearer [a-zA-Z0-9_\-\.=:_\+\/]{5,100}',
-                                   'authorization_api': r'api[key|_key|\s+]+[a-zA-Z0-9_\-]{5,100}',
-                                   'mailgun_api_key': r'key-[0-9a-zA-Z]{32}',
-                                   'twilio_api_key': r'SK[0-9a-fA-F]{32}',
-                                   'twilio_account_sid': r'AC[a-zA-Z0-9_\-]{32}',
-                                   'twilio_app_sid': r'AP[a-zA-Z0-9_\-]{32}',
-                                   'paypal_braintree_access_token': r'access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}',
-                                   'square_oauth_secret': r'sq0csp-[ 0-9A-Za-z\-_]{43}|sq0[a-z]{3}-[0-9A-Za-z\-_]{22,43}',
-                                   'square_access_token': r'sqOatp-[0-9A-Za-z\-_]{22}|EAAA[a-zA-Z0-9]{60}',
-                                   'stripe_standard_api': r'sk_live_[0-9a-zA-Z]{24}',
-                                   'stripe_restricted_api': r'rk_live_[0-9a-zA-Z]{24}',
-                                   'github_access_token': r'[a-zA-Z0-9_-]*:[a-zA-Z0-9_\-]+@github\.com*',
-                                   'rsa_private_key': r'-----BEGIN RSA PRIVATE KEY-----',
-                                   'ssh_dsa_private_key': r'-----BEGIN DSA PRIVATE KEY-----',
-                                   'ssh_dc_private_key': r'-----BEGIN EC PRIVATE KEY-----',
-                                   'pgp_private_block': r'-----BEGIN PGP PRIVATE KEY BLOCK-----',
-                                   'json_web_token': r'ey[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$',
-                                   'slack_token': r"\"api_token\":\"(xox[a-zA-Z]-[a-zA-Z0-9-]+)\"",
-                                   'SSH_privKey': r"([-]+BEGIN [^\s]+ PRIVATE KEY[-]+[\s]*[^-]*[-]+END [^\s]+ PRIVATE KEY[-]+)",
-                                   'possible_Creds': r"(?i)("r"password\s*[`=:\"]+\s*[^\s]+|"r"password is\s*[`=:\"]*\s*[^\s]+|"r"pwd\s*[`=:\"]*\s*[^\s]+|"r"passwd\s*[`=:\"]+\s*[^\s]+)", }
+        self.leak_info_patterns = {
+                                #     'mail': r'([-_a-zA-Z0-9\.]{1,64}@%s)', 'author': '@author[: ]+(.*?) ',
+                                #    'accesskey_id': 'accesskeyid.*?["\'](.*?)["\']',
+                                #    'accesskey_secret': 'accesskeyid.*?["\'](.*?)["\']',
+                                #    'access_key': 'access_key.*?["\'](.*?)["\']', 'google_api': r'AIza[0-9A-Za-z-_]{35}',
+                                #    'google_captcha': r'6L[0-9A-Za-z-_]{38}|^6[0-9a-zA-Z_-]{39}$',
+                                #    'google_oauth': r'ya29\.[0-9A-Za-z\-_]+',
+                                #    'amazon_aws_access_key_id': r'AKIA[0-9A-Z]{16}',
+                                #    'amazon_mws_auth_toke': r'amzn\\.mws\\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+                                #    'amazon_aws_url': r's3\.amazonaws.com[/]+|[a-zA-Z0-9_-]*\.s3\.amazonaws.com',
+                                #    'amazon_aws_url2': r"("r"[a-zA-Z0-9-\.\_]+\.s3\.amazonaws\.com"r"|s3://[a-zA-Z0-9-\.\_]+"r"|s3-[a-zA-Z0-9-\.\_\/]+"r"|s3.amazonaws.com/[a-zA-Z0-9-\.\_]+"r"|s3.console.aws.amazon.com/s3/buckets/[a-zA-Z0-9-\.\_]+)",
+                                #    'facebook_access_token': r'EAACEdEose0cBA[0-9A-Za-z]+',
+                                #    'authorization_basic': r'basic [a-zA-Z0-9=:_\+\/-]{5,100}',
+                                #    'authorization_bearer': r'bearer [a-zA-Z0-9_\-\.=:_\+\/]{5,100}',
+                                #    'authorization_api': r'api[key|_key|\s+]+[a-zA-Z0-9_\-]{5,100}',
+                                #    'mailgun_api_key': r'key-[0-9a-zA-Z]{32}',
+                                #    'twilio_api_key': r'SK[0-9a-fA-F]{32}',
+                                #    'twilio_account_sid': r'AC[a-zA-Z0-9_\-]{32}',
+                                #    'twilio_app_sid': r'AP[a-zA-Z0-9_\-]{32}',
+                                #    'paypal_braintree_access_token': r'access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32}',
+                                #    'square_oauth_secret': r'sq0csp-[ 0-9A-Za-z\-_]{43}|sq0[a-z]{3}-[0-9A-Za-z\-_]{22,43}',
+                                #    'square_access_token': r'sqOatp-[0-9A-Za-z\-_]{22}|EAAA[a-zA-Z0-9]{60}',
+                                #    'stripe_standard_api': r'sk_live_[0-9a-zA-Z]{24}',
+                                #    'stripe_restricted_api': r'rk_live_[0-9a-zA-Z]{24}',
+                                #    'github_access_token': r'[a-zA-Z0-9_-]*:[a-zA-Z0-9_\-]+@github\.com*',
+                                #    'rsa_private_key': r'-----BEGIN RSA PRIVATE KEY-----',
+                                #    'ssh_dsa_private_key': r'-----BEGIN DSA PRIVATE KEY-----',
+                                #    'ssh_dc_private_key': r'-----BEGIN EC PRIVATE KEY-----',
+                                #    'pgp_private_block': r'-----BEGIN PGP PRIVATE KEY BLOCK-----',
+                                #    'json_web_token': r'ey[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$',
+                                #    'slack_token': r"\"api_token\":\"(xox[a-zA-Z]-[a-zA-Z0-9-]+)\"",
+                                #    'SSH_privKey': r"([-]+BEGIN [^\s]+ PRIVATE KEY[-]+[\s]*[^-]*[-]+END [^\s]+ PRIVATE KEY[-]+)",
+                                #    'possible_Creds': r"(?i)("r"password\s*[`=:\"]+\s*[^\s]+|"r"password is\s*[`=:\"]*\s*[^\s]+|"r"pwd\s*[`=:\"]*\s*[^\s]+|"r"passwd\s*[`=:\"]+\s*[^\s]+)",
+                                   'ip':r'(?<![\.\d])(?:25[0-5]\.|2[0-4]\d\.|[01]?\d\d?\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)(?![\.\d])',
+                                    }
 
         """输出传入的Target以及Keywords"""
         if not os.path.isfile(target):
@@ -228,6 +239,49 @@ class JSINFO:
         logger.info('[+]Apis ==> {}'.format(now_time + '_apis'))
         logger.info('[+]LeakInfos ==> {}'.format(now_time + '_leakinfos'))
 
+    def startRealTime(self):
+        loop = asyncio.get_event_loop()
+        while self.queue.qsize() > 0:
+            try:
+                while not self.queue.empty():
+                    tasks = []
+                    i = 0
+                    while i < 50 and not self.queue.empty():
+                        """获取基本信息"""
+                        url = self.queue.get()
+                        """根据文件后缀创建异步任务列表"""
+                        filename = os.path.basename(url)
+                        file_extend = self.get_file_extend(filename)
+                        if file_extend == 'js':
+                            tasks.append(asyncio.ensure_future(self.FindLinkInJs(url)))
+                        else:
+                            tasks.append(asyncio.ensure_future(self.FindLinkInPage(url)))
+                        i += 1
+                    """开始跑异步任务"""
+                    if tasks:
+                        loop.run_until_complete(asyncio.wait(tasks))
+                    logger.info('-' * 20)
+                    logger.info('[+]root domain count ==> {}'.format(len(self.root_domains)))
+                    logger.info('[+]sub domain count ==> {}'.format(len(self.sub_domains)))
+                    logger.info('[+]api count ==> {}'.format(len(self.apis)))
+                    logger.info('[+]leakinfos count ==> {}'.format(len(self.leak_infos)))
+                    logger.info('[+]jsfile count ==> {}'.format(len(self.all_js_url)))
+                    logger.info('-' * 20)
+                    self.SaveData()
+                    logger.info('save success')
+                    logger.info('-' * 20)
+            except KeyboardInterrupt:
+                logger.info('[+]Break From Queue.')
+                break
+            except CancelledError:
+                pass
+        self.SaveData()
+        logger.info('[+]All root domain count ==> {}'.format(len(self.root_domains)))
+        logger.info('[+]All sub domain count ==> {}'.format(len(self.sub_domains)))
+        logger.info('[+]All api count ==> {}'.format(len(self.apis)))
+        logger.info('[+]All leakinfos count ==> {}'.format(len(self.leak_infos)))
+
+    
     async def FindLinkInPage(self, url):
         """发起请求"""
         try:
@@ -254,7 +308,6 @@ class JSINFO:
             js_texts = re.findall('<script>(.*?)</script>', resp)
         except TypeError:
             js_texts = []
-
         """获取完整的url"""
         parse_url = urlparse(url)
         for href in hrefs:
@@ -265,6 +318,8 @@ class JSINFO:
             full_js_url = self.extract_link(parse_url, js_url)
             if full_js_url is False:
                 continue
+            print(full_js_url)
+            
         for js_text in js_texts:
             self.FindLinkInJsText(url, js_text)
 
@@ -286,6 +341,40 @@ class JSINFO:
             full_api_url = self.extract_link(urlparse(url), match)
             if full_api_url is False:
                 continue
+    def SaveResp(self,url,response):
+        try:
+            parsed_result=urlparse(url)
+            p = parsed_result.path
+            domain_filder = os.path.dirname(p)
+            domain = parsed_result.netloc
+            filename = os.path.basename(p)
+            file_extend = self.get_file_extend(url)
+
+            if filename == '' or (file_extend == filename) or file_extend == '':
+                urlsplit = url.split('/')
+                splits = len(urlsplit)
+                for i in range(splits-1,0,-1):
+                    if(urlsplit[i] != ''):
+                        filename = urlsplit[i]+'.html'
+                        break
+
+            domain_path = os.path.join('result\\',domain)
+            domain_filder = os.path.dirname(p)
+            file_path= Path(domain_path)
+
+            if not os.path.exists(file_path):
+                os.makedirs(file_path)
+                
+
+            file = open(os.path.join(file_path,filename),'w',encoding='utf-8')
+            file.write(response)
+
+        except Exception as e:
+
+            logger.warning('[-]save {} fail'.format(url))
+            return False
+        
+
 
     def FindLinkInJsText(self, url, text):
         try:
@@ -301,6 +390,8 @@ class JSINFO:
 
     async def send_request(self, url):
         """解决asyncio的历史遗留BUG"""
+
+
         sem = asyncio.Semaphore(1024)
         try:
             async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
@@ -308,6 +399,8 @@ class JSINFO:
                     async with session.get(url, timeout=20, headers=self.headers) as req:
                         await asyncio.sleep(1)
                         response = await req.text('utf-8', 'ignore')
+                        """将内容保存下来"""
+                        # self.SaveResp(url,response)
                         req.close()
                         return response
         except CancelledError:
@@ -317,6 +410,10 @@ class JSINFO:
         except Exception as e:
             logger.warning('[-]Resolve {} fail'.format(url))
             return False
+    def filter_black_keyword(self,suffix):
+        for black in self.black_keywords:
+            if suffix in black:
+                return False
 
     def filter_black_extend(self, file_extend):
         if file_extend in self.black_extend_list:
@@ -375,7 +472,7 @@ class JSINFO:
                 in_keyword = True
         if not in_keyword:
             return False
-        """添加根域名"""
+        """添加根域名到队列"""
         try:
             self._value_lock.acquire()
             if root_domain not in self.root_domains:
@@ -387,7 +484,7 @@ class JSINFO:
         finally:
             self._value_lock.release()
 
-        """添加子域名"""
+        """添加子域名到队列"""
         try:
             self._value_lock.acquire()
             if sub_domain not in self.sub_domains and sub_domain != root_domain:
@@ -411,6 +508,7 @@ class JSINFO:
             self._value_lock.release()
 
         format_url = self.get_format_url(urlparse(full_url), filename, file_extend)
+
 
         try:
             self._value_lock.acquire()
@@ -446,5 +544,36 @@ class JSINFO:
             self._value_lock.release()
 
 
+
+    #------------
+    #保存结果
+    def SaveData(self):
+
+        with open(self.now_time + '_rootdomain', 'w+', encoding='utf-8') as f:
+            # logger.info('rootdomain lines '+str(len(f.readlines())))
+            for i in self.root_domains:
+                f.write(i.strip() + '\n')
+            f.close()
+        with open(self.now_time + '_subdomain', 'w+', encoding='utf-8') as f:
+            for i in self.sub_domains:
+                f.write(i.strip() + '\n')
+            f.close()
+        with open(self.now_time + '_apis', 'w+', encoding='utf-8') as f:
+            for i in self.apis:
+                f.write(i.strip() + '\n')
+            f.close()
+        with open(self.now_time + '_leakinfos', 'w+', encoding='utf-8') as f:
+            for i in self.leak_infos:
+                i = str(i)
+                f.write(i.strip() + '\n')
+            f.close()
+        with open(self.now_time + '_all_js_url', 'w', encoding='utf-8') as f:
+            for i in self.all_js_url:
+                f.write(i.strip() + '\n')
+            f.close()
+
+
+
+
 if __name__ == '__main__':
-    JSINFO().start()
+    JSINFO().startRealTime()
